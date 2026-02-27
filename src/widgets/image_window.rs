@@ -455,6 +455,39 @@ mod imp {
                     true
                 }
             ));
+
+            // Zoom via scroll wheels etc
+            let scroll_controller = gtk::EventControllerScroll::new(
+                gtk::EventControllerScrollFlags::VERTICAL
+                    | gtk::EventControllerScrollFlags::DISCRETE,
+            );
+            scroll_controller.connect_scroll(glib::clone!(
+                #[weak]
+                obj,
+                #[upgrade_or]
+                glib::Propagation::Proceed,
+                move |event, _, y| {
+                    let imp = obj.imp();
+                    if event.current_event_device().map(|x| x.source())
+                        == Some(gdk::InputSource::Touchpad)
+                    {
+                        glib::Propagation::Proceed
+                    } else {
+                        let image_view = imp.image_view.clone();
+                        if y > 0. {
+                            if image_view.is_next_available() {
+                                image_view.navigate(Direction::Forward, true);
+                            }
+                        } else {
+                            if image_view.is_previous_available() {
+                                image_view.navigate(Direction::Back, true);
+                            }
+                        }
+                        glib::Propagation::Stop
+                    }
+                }
+            ));
+            obj.window().add_controller(scroll_controller);
         }
     }
 

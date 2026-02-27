@@ -92,38 +92,37 @@ impl imp::LpImage {
                     if state.contains(gdk::ModifierType::CONTROL_MASK)
                         || state.contains(gdk::ModifierType::SHIFT_MASK)
                     {
-                        // propagate event to scrolled window
-                        return glib::Propagation::Proceed;
+                        // Use exponential scaling since zoom is always multiplicative with the existing
+                        // value This is the right thing since `exp(n/2)^2 == exp(n)`
+                        // (two small steps are the same as one larger step)
+                        let (zoom_factor, animated) = match event.unit() {
+                            gdk::ScrollUnit::Wheel => (
+                                f64::exp(-y * f64::ln(ZOOM_FACTOR_SCROLL_WHEEL)),
+                                y.abs() >= 1.,
+                            ),
+                            gdk::ScrollUnit::Surface => {
+                                (f64::exp(-y * f64::ln(ZOOM_FACTOR_SCROLL_SURFACE)), false)
+                            }
+                            unknown_unit => {
+                                tracing::warn!("Ignoring unknown scroll unit: {unknown_unit:?}");
+                                (1., false)
+                            }
+                        };
+
+                        let zoom = imp.zoom_target.get() * zoom_factor;
+
+                        if animated {
+                            obj.zoom_to(zoom);
+                        } else {
+                            imp.zoom_to_full(zoom, false, false, false);
+                        }
+                        // do not propagate event to scrolled window
+                        return glib::Propagation::Stop;
                     }
                 }
 
-                // Use exponential scaling since zoom is always multiplicative with the existing
-                // value This is the right thing since `exp(n/2)^2 == exp(n)`
-                // (two small steps are the same as one larger step)
-                let (zoom_factor, animated) = match event.unit() {
-                    gdk::ScrollUnit::Wheel => (
-                        f64::exp(-y * f64::ln(ZOOM_FACTOR_SCROLL_WHEEL)),
-                        y.abs() >= 1.,
-                    ),
-                    gdk::ScrollUnit::Surface => {
-                        (f64::exp(-y * f64::ln(ZOOM_FACTOR_SCROLL_SURFACE)), false)
-                    }
-                    unknown_unit => {
-                        tracing::warn!("Ignoring unknown scroll unit: {unknown_unit:?}");
-                        (1., false)
-                    }
-                };
-
-                let zoom = imp.zoom_target.get() * zoom_factor;
-
-                if animated {
-                    obj.zoom_to(zoom);
-                } else {
-                    imp.zoom_to_full(zoom, false, false, false);
-                }
-
-                // do not propagate event to scrolled window
-                glib::Propagation::Stop
+                // propagate event to scrolled window
+                glib::Propagation::Proceed
             }
         ));
 
